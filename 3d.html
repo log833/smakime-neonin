@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Smakime Neonin 3D</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { margin:0; overflow:hidden; background:#000; }
+
+#mobileControls {
+  position:fixed;
+  bottom:20px;
+  left:50%;
+  transform:translateX(-50%);
+  display:flex;
+  gap:10px;
+  z-index:10;
+}
+
+button {
+  font-size:22px;
+  padding:14px 20px;
+  opacity:0.75;
+}
+</style>
+</head>
+<body>
+
+<div id="mobileControls">
+  <button id="left">◀</button>
+  <button id="jump">⤴</button>
+  <button id="right">▶</button>
+</div>
+
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script>
+/* ================= SCENE ================= */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+
+const camera = new THREE.PerspectiveCamera(
+  75, window.innerWidth / window.innerHeight, 0.1, 1000
+);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+/* ================= LIGHT ================= */
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const sun = new THREE.DirectionalLight(0xffffff, 1);
+sun.position.set(5,10,5);
+scene.add(sun);
+
+/* ================= PLAYER (2D IMAGE) ================= */
+const loader = new THREE.TextureLoader();
+
+// 🔴 PUT YOUR IMAGE LINK HERE
+const playerTexture = loader.load(
+  "mango2.png"
+);
+
+const player = new THREE.Mesh(
+  new THREE.PlaneGeometry(1, 2),
+  new THREE.MeshBasicMaterial({
+    map: playerTexture,
+    transparent:true
+  })
+);
+player.position.set(0, 2, 0);
+scene.add(player);
+
+/* ================= PLATFORMS ================= */
+const platforms = [];
+
+function addPlatform(x,y,w) {
+  const p = new THREE.Mesh(
+    new THREE.BoxGeometry(w,1,5),
+    new THREE.MeshStandardMaterial({ color:0x444444 })
+  );
+  p.position.set(x,y,0);
+  scene.add(p);
+  platforms.push(p);
+}
+
+addPlatform(0,0,10);
+addPlatform(7,2,6);
+addPlatform(15,4,6);
+addPlatform(24,6,6);
+
+/* ================= PHYSICS ================= */
+let velY = 0;
+let onGround = false;
+let facing = 1;
+
+const gravity = 0.015;
+const speed = 0.08;
+const jumpPower = 0.35;
+
+/* ================= INPUT ================= */
+const keys = {};
+addEventListener("keydown", e => keys[e.key] = true);
+addEventListener("keyup", e => keys[e.key] = false);
+
+// Mobile buttons
+const mobile = { left:false, right:false, jump:false };
+["left","right","jump"].forEach(id=>{
+  const b = document.getElementById(id);
+  b.addEventListener("touchstart",e=>{e.preventDefault();mobile[id]=true});
+  b.addEventListener("touchend",()=>mobile[id]=false);
+});
+
+/* ================= CAMERA CONTROL ================= */
+let camAngle = 0;
+let camTilt = 0.3;
+let camDistance = 8;
+
+const minZoom = 4;
+const maxZoom = 14;
+
+let dragging = false;
+let touchX = 0;
+let touchY = 0;
+let lastPinch = null;
+
+addEventListener("touchstart", e=>{
+  if (e.touches.length === 1) {
+    dragging = true;
+    touchX = e.touches[0].clientX;
+    touchY = e.touches[0].clientY;
+  }
+});
+
+addEventListener("touchmove", e=>{
+  if (e.touches.length === 1 && dragging) {
+    const dx = e.touches[0].clientX - touchX;
+    const dy = e.touches[0].clientY - touchY;
+    camAngle -= dx * 0.005;
+    camTilt -= dy * 0.005;
+    camTilt = Math.max(0.1, Math.min(1.2, camTilt));
+    touchX = e.touches[0].clientX;
+    touchY = e.touches[0].clientY;
+  }
+
+  // Pinch zoom
+  if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.hypot(dx,dy);
+    if (lastPinch !== null) {
+      camDistance -= (dist - lastPinch) * 0.01;
+      camDistance = Math.max(minZoom, Math.min(maxZoom, camDistance));
+    }
+    lastPinch = dist;
+  }
+});
+
+addEventListener("touchend",()=>{
+  dragging = false;
+  lastPinch = null;
+});
+
+/* ================= CAMERA COLLISION ================= */
+const raycaster = new THREE.Raycaster();
+
+/* ================= GAME LOOP ================= */
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Movement
+  if (keys["a"] || keys["ArrowLeft"] || mobile.left) {
+    player.position.x -= speed;
+    facing = -1;
+  }
+  if (keys["d"] || keys["ArrowRight"] || mobile.right) {
+    player.position.x += speed;
+    facing = 1;
+  }
+
+  // Jump
+  if ((keys[" "] || keys["w"] || keys["ArrowUp"] || mobile.jump) && onGround) {
+    velY = jumpPower;
+    onGround = false;
+  }
+
+  // Gravity
+  velY -= gravity;
+  player.position.y += velY;
+
+  // Collision
+  onGround = false;
+  platforms.forEach(p=>{
+    if (
+      player.position.x > p.position.x - p.scale.x * 2 &&
+      player.position.x < p.position.x + p.scale.x * 2 &&
+      player.position.y <= p.position.y + 1 &&
+      player.position.y >= p.position.y
+    ) {
+      player.position.y = p.position.y + 1;
+      velY = 0;
+      onGround = true;
+    }
+  });
+
+  // Billboard + flip
+  player.lookAt(camera.position);
+  player.scale.x = facing;
+
+  // Camera follow + collision
+  const targetCam = new THREE.Vector3(
+    player.position.x + Math.sin(camAngle) * camDistance,
+    player.position.y + 3 + camTilt * 3,
+    Math.cos(camAngle) * camDistance
+  );
+
+  raycaster.set(
+    player.position,
+    targetCam.clone().sub(player.position).normalize()
+  );
+  const hit = raycaster.intersectObjects(platforms);
+  if (hit.length && hit[0].distance < camDistance) {
+    targetCam.copy(hit[0].point);
+  }
+
+  camera.position.lerp(targetCam, 0.12);
+  camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+/* ================= RESIZE ================= */
+addEventListener("resize",()=>{
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+
+</body>
+</html>
+
