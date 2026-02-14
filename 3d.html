@@ -52,16 +52,17 @@ const sun = new THREE.DirectionalLight(0xffffff, 1);
 sun.position.set(5,10,5);
 scene.add(sun);
 
-/* ================= PLAYER (2D IMAGE) ================= */
+/* ================= PLAYER ================= */
 const loader = new THREE.TextureLoader();
 
 // 🔴 PUT YOUR IMAGE LINK HERE
-const playerTexture = loader.load(
-  "mango2.png"
-);
+const playerTexture = loader.load("https://i.imgur.com/6Xg7Z9P.png");
+
+const PLAYER_W = 1;
+const PLAYER_H = 2;
 
 const player = new THREE.Mesh(
-  new THREE.PlaneGeometry(1, 2),
+  new THREE.PlaneGeometry(PLAYER_W, PLAYER_H),
   new THREE.MeshBasicMaterial({
     map: playerTexture,
     transparent:true
@@ -142,7 +143,6 @@ addEventListener("touchmove", e=>{
     touchY = e.touches[0].clientY;
   }
 
-  // Pinch zoom
   if (e.touches.length === 2) {
     const dx = e.touches[0].clientX - e.touches[1].clientX;
     const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -167,46 +167,72 @@ const raycaster = new THREE.Raycaster();
 function animate() {
   requestAnimationFrame(animate);
 
-  // Movement
+  /* ---- Horizontal Movement ---- */
+  let moveX = 0;
   if (keys["a"] || keys["ArrowLeft"] || mobile.left) {
-    player.position.x -= speed;
+    moveX -= speed;
     facing = -1;
   }
   if (keys["d"] || keys["ArrowRight"] || mobile.right) {
-    player.position.x += speed;
+    moveX += speed;
     facing = 1;
   }
 
-  // Jump
+  player.position.x += moveX;
+
+  /* ---- Jump ---- */
   if ((keys[" "] || keys["w"] || keys["ArrowUp"] || mobile.jump) && onGround) {
     velY = jumpPower;
     onGround = false;
   }
 
-  // Gravity
+  /* ---- Gravity ---- */
   velY -= gravity;
   player.position.y += velY;
 
-  // Collision
+  /* ---- COLLISION (NO CLIPPING) ---- */
   onGround = false;
+
   platforms.forEach(p=>{
-    if (
-      player.position.x > p.position.x - p.scale.x * 2 &&
-      player.position.x < p.position.x + p.scale.x * 2 &&
-      player.position.y <= p.position.y + 1 &&
-      player.position.y >= p.position.y
-    ) {
-      player.position.y = p.position.y + 1;
-      velY = 0;
-      onGround = true;
+    const pBox = new THREE.Box3().setFromObject(p);
+
+    const playerBox = new THREE.Box3(
+      new THREE.Vector3(
+        player.position.x - PLAYER_W/2,
+        player.position.y,
+        -0.5
+      ),
+      new THREE.Vector3(
+        player.position.x + PLAYER_W/2,
+        player.position.y + PLAYER_H,
+        0.5
+      )
+    );
+
+    if (playerBox.intersectsBox(pBox)) {
+
+      // Landing from above
+      if (velY <= 0 && player.position.y + PLAYER_H - velY <= pBox.max.y) {
+        player.position.y = pBox.max.y;
+        velY = 0;
+        onGround = true;
+      }
+
+      // Side wall block
+      if (moveX > 0) {
+        player.position.x = pBox.min.x - PLAYER_W/2;
+      }
+      if (moveX < 0) {
+        player.position.x = pBox.max.x + PLAYER_W/2;
+      }
     }
   });
 
-  // Billboard + flip
+  /* ---- Billboard + Flip ---- */
   player.lookAt(camera.position);
   player.scale.x = facing;
 
-  // Camera follow + collision
+  /* ---- Camera Follow + Collision ---- */
   const targetCam = new THREE.Vector3(
     player.position.x + Math.sin(camAngle) * camDistance,
     player.position.y + 3 + camTilt * 3,
@@ -240,4 +266,3 @@ addEventListener("resize",()=>{
 
 </body>
 </html>
-
