@@ -162,16 +162,16 @@ function animate(){
 
   /* Horizontal */
   let moveX=0;
-  if(keys["a"]||keys["ArrowLeft"]||mobile.left){moveX-=speed; facing=-1;}
-  if(keys["d"]||keys["ArrowRight"]||mobile.right){moveX+=speed; facing=1;}
+  if(keys["a"]||keys["1"]||keys["ArrowLeft"]||mobile.left){moveX-=speed; facing=-1;}
+  if(keys["d"]||keys["3"]||keys["ArrowRight"]||mobile.right){moveX+=speed; facing=1;}
   player.position.x += moveX;
 
   /* Jump */
-  if((keys[" "]||keys["w"]||keys["ArrowUp"]||mobile.jump)&&onGround){
+  if((keys[" "]||keys["w"]||keys["0"]||keys["ArrowUp"]||mobile.jump)&&onGround){
     velY=jumpPower;
     onGround=false;
   }
-
+  
   /* Gravity */
   velY -= gravity;
   player.position.y += velY;
